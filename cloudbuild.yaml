@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/tazibot', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/tazibot']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args: ['run', 'deploy', 'tazibot',
+           '--image', 'gcr.io/$PROJECT_ID/tazibot',
+           '--platform', 'managed',
+           '--region', 'us-central1',
+           '--allow-unauthenticated',
+           '--set-secrets', 'SLACK_BOT_TOKEN=slack-bot-token,OPENAI_API_KEY=openai-api-key']
+images:
+  - gcr.io/$PROJECT_ID/tazibot
