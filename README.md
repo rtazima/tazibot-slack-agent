@@ -40,13 +40,31 @@ Um agente que monitora mensagens do Slack, classifica por tipo (incidente, decis
      --member="serviceAccount:[PROJECT_NUMBER]-compute@developer.gserviceaccount.com" \
      --role="roles/secretmanager.secretAccessor"
    ```
-
 4. Suba o código e rode o build:
+   ```bash
+   gcloud builds submit --config cloudbuild.yaml .
+   ```
+
+   > ℹ️ Certifique-se de que o arquivo `cloudbuild.yaml` use o seguinte formato para associar os secrets corretamente:
+   ```yaml
+   --set-secrets=SLACK_BOT_TOKEN=slack-bot-token:latest,OPENAI_API_KEY=openai-api-key:latest
+   ```
+
+5. Torne o serviço público (necessário para Slack acessar):
+   ```bash
+   gcloud run services add-iam-policy-binding tazibot \
+     --region=us-central1 \
+     --platform=managed \
+     --member="allUsers" \
+     --role="roles/run.invoker"
+   ```
+
+6. Suba o código e rode o build:
    ```
    gcloud builds submit --config cloudbuild.yaml .
    ```
 
-5. Acompanhe logs do Cloud Run:
+7. Acompanhe logs do Cloud Run:
    ```
    gcloud logs read --platform=managed --project=[PROJECT_ID] --limit=50
    ```

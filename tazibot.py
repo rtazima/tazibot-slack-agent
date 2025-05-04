@@ -1,54 +1,37 @@
 import os
-from slack_sdk import WebClient
-from slack_sdk.rtm_v2 import RTMClient
-import openai
+from slack_bolt import App
+from slack_bolt.adapter.flask import SlackRequestHandler
+from flask import Flask, request
+from openai import OpenAI
 
-slack_token = os.environ["SLACK_BOT_TOKEN"]
-openai.api_key = os.environ["OPENAI_API_KEY"]
+# Inicializa Slack Bolt App e Flask
+slack_bot_token = os.environ.get("SLACK_BOT_TOKEN")
+openai_key = os.environ.get("OPENAI_API_KEY")
 
-client = WebClient(token=slack_token)
+app = App(token=slack_bot_token)
+handler = SlackRequestHandler(app)
+flask_app = Flask(__name__)
+openai = OpenAI(api_key=openai_key)
 
-TAZIBOT_PROMPT = "Você é o TaziBot, um assistente que responde no estilo direto, humano e informal do Rodrigo Tazima. Seja objetivo, use emojis com parcimônia, fale como um líder técnico que é acessível e resolutivo."
-CLASSIFICADOR_PROMPT = "Classifique a seguinte mensagem do Slack. Responda somente com a categoria: [Incidente, Dúvida Técnica, Decisão, Off-topic, Outro]. Mensagem: "
+# Evento de mensagem
+@app.event("message")
+def handle_message_events(body, say, logger):
+    event = body.get("event", {})
+    text = event.get("text")
+    if text and not event.get("bot_id"):
+        response = f"Recebido: {text}"
+        say(response)
 
-def gerar_resposta(texto):
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": TAZIBOT_PROMPT},
-            {"role": "user", "content": f"Mensagem recebida: '{texto}'. Como o Tazima responderia?"}
-        ]
-    )
-    return resposta.choices[0].message.content.strip()
+# Endpoint para o Slack Events API
+@flask_app.route("/slack/events", methods=["POST"])
+def slack_events():
+    return handler.handle(request)
 
-def classificar_mensagem(texto):
-    resposta = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Você é um classificador de mensagens Slack."},
-            {"role": "user", "content": f"{CLASSIFICADOR_PROMPT} {texto}"}
-        ]
-    )
-    return resposta.choices[0].message.content.strip()
-
-@RTMClient.run_on(event="message")
-def handle_message(**payload):
-    data = payload['data']
-    if 'text' in data and 'user' in data and not data.get('bot_id'):
-        texto = data['text']
-        canal = data['channel']
-        categoria = classificar_mensagem(texto)
-        if any(x in texto.lower() for x in ["bom dia", "valeu", "tudo certo", "obrigado"]):
-            resposta = gerar_resposta(texto)
-            client.chat_postMessage(channel=canal, text=resposta)
-        elif categoria in ["Incidente", "Decisão"]:
-            client.chat_postMessage(
-                channel=canal,
-                text=f"🔍 Classifiquei essa como *{categoria}*:
-> {texto}"
-            )
+# Health check para Cloud Run
+@flask_app.route("/")
+def index():
+    return "TaziBot rodando com Slack Bolt + Flask"
 
 if __name__ == "__main__":
-    print("TaziBot ativo...")
-    rtm = RTMClient(token=slack_token)
-    rtm.start()
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
